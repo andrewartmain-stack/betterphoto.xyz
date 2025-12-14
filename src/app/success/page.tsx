@@ -1,13 +1,16 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function SuccessPage() {
-    useEffect(() => {
-        const gid = localStorage.getItem('generationId');
+    const [gid, setGid] = useState<string | null>(null);
 
-        if (gid) {
-            // 🔥 сразу начинаем скачивание
-            window.location.href = `/api/download?gid=${gid}`;
+    useEffect(() => {
+        // ✅ только на клиенте
+        const storedGid = localStorage.getItem('generationId');
+        if (storedGid) {
+            setGid(storedGid);
+            // сразу начинаем скачивание
+            window.location.href = `/api/download?gid=${storedGid}`;
         }
     }, []);
 
@@ -17,16 +20,15 @@ export default function SuccessPage() {
             <p className="text-gray-400 text-sm">
                 Your download will start automatically…
             </p>
-            <p className="text-gray-400 text-sm mt-2">
-                If the download doesn’t start, click{' '}
-                <a
-                    className="underline"
-                    href={`/api/download?gid=${localStorage.getItem('generationId')}`}
-                >
-                    here
-                </a>
-                .
-            </p>
+            {gid && (
+                <p className="text-gray-400 text-sm mt-2">
+                    If the download doesn’t start, click{' '}
+                    <a className="underline" href={`/api/download?gid=${gid}`}>
+                        here
+                    </a>
+                    .
+                </p>
+            )}
         </div>
     );
 }
