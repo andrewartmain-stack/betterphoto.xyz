@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const generationId = session.client_reference_id;
 
     if (generationId) {
-      await supabase
+      await supabaseServer
         .from('generations')
         .update({ paid: true })
         .eq('id', generationId);
