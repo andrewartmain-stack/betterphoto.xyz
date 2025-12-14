@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
   const { data: fileData, error } = await supabase.storage
     .from('results')
-    .download(data.result_path);
+    .download(data.result_url);
 
   if (error || !fileData)
     return NextResponse.json({ error: 'File not found' }, { status: 404 });
