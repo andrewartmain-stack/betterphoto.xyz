@@ -17,6 +17,8 @@ export async function POST(req: Request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const generationId = session.client_reference_id;
+    console.log('Webhook session id:', session.id);
+    console.log('Client reference id (generationId):', generationId);
 
     if (generationId) {
       await supabaseServer
