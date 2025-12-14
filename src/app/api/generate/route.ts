@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { fal } from '@fal-ai/client';
 import { supabaseServer } from '@/lib/supabase-server';
 import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
 
 export async function POST(req: Request) {
   try {
@@ -34,30 +36,17 @@ export async function POST(req: Request) {
     const height = metadata.height ?? 1024;
 
     // watermark всегда меньше изображения
-    const watermarkWidth = Math.floor(width * 0.8);
-    const watermarkHeight = Math.floor(height * 0.2);
+    // const watermarkWidth = Math.floor(width * 0.8);
+    // const watermarkHeight = Math.floor(height * 0.2);
 
-    const watermarkSvg = `
-<svg width="${watermarkWidth}" height="${watermarkHeight}">
-  <text
-    x="50%"
-    y="50%"
-    text-anchor="middle"
-    dominant-baseline="middle"
-    font-size="${Math.floor(watermarkHeight * 0.4)}"
-    fill="white"
-    opacity="0.35"
-    font-family="Arial, Helvetica, sans-serif"
-  >
-    BetterPhoto.xyz
-  </text>
-</svg>
-`;
+    const watermarkBuffer = fs.readFileSync(
+      path.join(process.cwd(), 'public/watermark.png')
+    );
 
-    const previewBuffer = await image
+    const previewBuffer = await sharp(imageBuffer)
       .composite([
         {
-          input: Buffer.from(watermarkSvg),
+          input: watermarkBuffer,
           gravity: 'center',
         },
       ])
