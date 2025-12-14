@@ -205,13 +205,8 @@ export default function Page() {
             {!paid ? (
               <button
                 onClick={() => {
-                  // 1️⃣ сохраняем generationId локально
-                  localStorage.setItem('generationId', generationId as string);
-
-                  // 2️⃣ уходим на Stripe
                   window.location.href =
-                    `https://buy.stripe.com/28E9AS2Qy6xj9pGf4JdUY01` +
-                    `?client_reference_id=${generationId}`;
+                    `https://buy.stripe.com/28E9AS2Qy6xj9pGf4JdUY01?client_reference_id=${generationId}&success_url=${encodeURIComponent(`${window.location.origin}/success?gid=${generationId}`)}`;
                 }}
               >
                 Unlock & Download — $2
