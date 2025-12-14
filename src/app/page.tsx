@@ -1,21 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { v4 as uuidv4 } from 'uuid';
 import {
   CloudArrowUpIcon,
-  CheckCircleIcon,
-  PaintBrushIcon,
-  MapPinIcon,
-  EyeIcon,
   SparklesIcon,
   ArrowPathIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 
 export default function Page() {
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [generationId, setGenerationId] = useState<string | null>(null);
+  const [paid, setPaid] = useState(false);
+
+  /* -------------------- PREDEFINED OPTIONS -------------------- */
 
   const styleOptions = [
     { value: 'aesthetic professional photo', label: 'Aesthetic Professional' },
@@ -42,17 +45,36 @@ export default function Page() {
   const [cameraLook, setCameraLook] = useState(cameraOptions[0].value);
   const [location, setLocation] = useState(locationOptions[0].value);
 
-  const handleUpload = async () => {
-    if (!file) return alert('Select a photo first');
+  /* -------------------- PAYMENT RETURN -------------------- */
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paidParam = params.get('paid');
+    const gid = params.get('gid');
+
+    if (paidParam === 'true' && gid) {
+      setPaid(true);
+      setGenerationId(gid);
+    }
+  }, []);
+
+  /* -------------------- GENERATE -------------------- */
+
+  const handleGenerate = async () => {
+    if (!file) return alert('Upload a photo first');
 
     setLoading(true);
-    setResult(null);
+    setPreview(null);
+
+    const gid = uuidv4();
+    setGenerationId(gid);
 
     const prompt = `Create ${style} in ${location}. The subject is posing naturally, ${cameraLook}, standing slightly sideways, with a calm, non-smiling expression. Use a muted, moody atmosphere with soft cinematic lighting and a darkened overall tone. Apply an aesthetic color palette inspired by #d8d5cd, #d9d2c7, and #655340. Editorial, film-like look, shallow depth of field, clean composition, subtle grain, and high-end photography style.`;
 
     try {
-      const fileName = `${Date.now()}-${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const fileName = `${gid}-${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
         .from('uploads')
         .upload(fileName, file);
 
@@ -62,253 +84,149 @@ export default function Page() {
         .from('uploads')
         .getPublicUrl(fileName);
 
-      if (!publicUrl) throw new Error('Failed to get public URL');
-
-      const genRes = await fetch('/api/generate', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: publicUrl, prompt }),
+        body: JSON.stringify({
+          imageUrl: publicUrl.publicUrl,
+          prompt,
+          generationId: gid,
+        }),
       });
 
-      const genData = await genRes.json();
-      if (!genData.previewUrl) throw new Error('Generation failed');
-
-      setResult(genData.previewUrl);
+      const data = await res.json();
+      setPreview(data.previewUrl);
     } catch (err) {
       console.error(err);
-      alert('Something went wrong: ' + (err as Error).message);
+      alert('Generation failed');
     } finally {
       setLoading(false);
     }
   };
 
+  /* -------------------- UI -------------------- */
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex flex-col items-center font-sans px-4 py-8">
-      {/* Header */}
-      <div className="w-full max-w-2xl text-center mb-12">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="relative">
-            <img src="./logo.png" width={56} alt="logo" className="rounded-xl" />
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full flex items-center justify-center">
-              <span className="text-xs text-white font-bold">AI</span>
-            </div>
-          </div>
-          <div className="text-left">
-            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-              BetterPhoto.xyz
-            </h1>
-            <p className="text-gray-500 text-sm">AI Photo Enhancer</p>
-          </div>
-        </div>
-        <p className="text-gray-600 max-w-md mx-auto">
-          Transform your photos with AI-powered aesthetic enhancements
-        </p>
+    <main className="min-h-screen bg-white text-black px-4 py-10">
+      <div className="max-w-5xl mx-auto">
+
+        {/* Header */}
+        <header className="text-center mb-12">
+          <h1 className="text-4xl font-bold tracking-tight">
+            BetterPhoto<span className="opacity-50">.xyz</span>
+          </h1>
+          <p className="mt-3 text-gray-500">
+            Turn your photo into an aesthetic Instagram-ready portrait
+          </p>
+        </header>
+
+        {/* Controls */}
+        <section className="grid md:grid-cols-3 gap-4 mb-8">
+          <select
+            className="border px-3 py-2 rounded-sm"
+            value={style}
+            onChange={(e) => setStyle(e.target.value)}
+          >
+            {styleOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="border px-3 py-2 rounded-sm"
+            value={cameraLook}
+            onChange={(e) => setCameraLook(e.target.value)}
+          >
+            {cameraOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="border px-3 py-2 rounded-sm"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          >
+            {locationOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </section>
+
+        {/* Upload */}
+        <section className="border rounded-lg p-8 text-center mb-10">
+          <label className="cursor-pointer block">
+            <CloudArrowUpIcon className="w-10 h-10 mx-auto text-gray-400 mb-3" />
+            <p className="text-gray-600">
+              {file ? file.name : 'Click to upload photo'}
+            </p>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
+          </label>
+
+          <button
+            onClick={handleGenerate}
+            disabled={loading || !file}
+            className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-black text-white rounded-sm disabled:opacity-50"
+          >
+            {loading ? (
+              <>
+                <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                Generating
+              </>
+            ) : (
+              <>
+                <SparklesIcon className="w-5 h-5" />
+                Enhance photo
+              </>
+            )}
+          </button>
+        </section>
+
+        {/* Preview */}
+        {preview && (
+          <section className="text-center">
+            <img
+              src={preview}
+              alt="Preview"
+              className="mx-auto rounded-lg shadow-lg mb-6 max-h-[500px]"
+            />
+
+            {!paid ? (
+              <button
+                onClick={() => {
+                  // 1️⃣ сохраняем generationId локально
+                  localStorage.setItem('generationId', generationId as string);
+
+                  // 2️⃣ уходим на Stripe
+                  window.location.href =
+                    `https://buy.stripe.com/28E9AS2Qy6xj9pGf4JdUY01` +
+                    `?client_reference_id=${generationId}`;
+                }}
+              >
+                Unlock & Download — $2
+              </button>
+            ) : (
+              <a
+                href={`/api/download?gid=${generationId}`}
+                className="inline-block px-6 py-3 bg-black text-white rounded-sm"
+              >
+                Download without watermark
+              </a>
+            )}
+          </section>
+        )}
       </div>
-
-      <div className="w-full max-w-2xl flex flex-col lg:flex-row gap-8">
-        {/* Left Panel - Controls */}
-        <div className="lg:w-1/2">
-          {/* Style Options */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <PaintBrushIcon className="w-5 h-5 text-gray-700" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Style</h3>
-                <p className="text-sm text-gray-500">Choose your aesthetic</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {styleOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setStyle(option.value)}
-                  className={`p-3 rounded-xl border transition-all duration-200 ${style === option.value
-                    ? 'border-gray-800 bg-gray-900 text-white'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
-                    }`}
-                >
-                  <span className="text-sm font-medium">{option.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Camera & Location */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <EyeIcon className="w-5 h-5 text-gray-700" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Gaze Direction</h3>
-                  <p className="text-sm text-gray-500">Set the subject's look</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                {cameraOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setCameraLook(option.value)}
-                    className={`flex-1 p-3 rounded-xl border transition-all duration-200 ${cameraLook === option.value
-                      ? 'border-gray-800 bg-gray-900 text-white'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
-                      }`}
-                  >
-                    <span className="text-sm font-medium">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <MapPinIcon className="w-5 h-5 text-gray-700" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Location</h3>
-                  <p className="text-sm text-gray-500">Choose your backdrop</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {locationOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setLocation(option.value)}
-                    className={`p-3 rounded-xl border transition-all duration-200 ${location === option.value
-                      ? 'border-gray-800 bg-gray-900 text-white'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
-                      }`}
-                  >
-                    <span className="text-sm font-medium">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Panel - Upload & Preview */}
-        <div className="lg:w-1/2 space-y-8">
-          {/* Upload Section */}
-          <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-8">
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                Upload Photo
-              </h2>
-              <p className="text-gray-500 text-sm">
-                Supported formats: JPG, PNG, WEBP
-              </p>
-            </div>
-
-            <label
-              htmlFor="file-upload"
-              className={`group relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all duration-300 ${file
-                ? 'border-green-500 bg-green-50'
-                : 'border-gray-300 hover:border-gray-400 bg-white'
-                } p-10 cursor-pointer mb-6`}
-            >
-              {file ? (
-                <>
-                  <CheckCircleIcon className="w-12 h-12 text-green-500 mb-3" />
-                  <span className="text-gray-700 font-medium">{file.name}</span>
-                  <span className="text-sm text-gray-500 mt-1">
-                    Click to change
-                  </span>
-                </>
-              ) : (
-                <>
-                  <div className="p-4 bg-gray-100 rounded-full mb-4 group-hover:bg-gray-200 transition-colors">
-                    <CloudArrowUpIcon className="w-8 h-8 text-gray-600" />
-                  </div>
-                  <span className="text-gray-700 font-medium">
-                    Drag & drop or click to upload
-                  </span>
-                  <span className="text-sm text-gray-500 mt-1">
-                    Max file size: 10MB
-                  </span>
-                </>
-              )}
-              <input
-                id="file-upload"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-            </label>
-
-            <button
-              onClick={handleUpload}
-              disabled={loading || !file}
-              className={`w-full py-4 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-3
-                ${loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 hover:shadow-lg'
-                }
-                ${!file ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {loading ? (
-                <>
-                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
-                  Enhancing...
-                </>
-              ) : (
-                <>
-                  <SparklesIcon className="w-5 h-5" />
-                  Enhance Photo
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Preview Section */}
-          {result && (
-            <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircleIcon className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Enhanced</h3>
-                    <p className="text-sm text-gray-500">Your transformed photo</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => navigator.clipboard.writeText(result)}
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Copy Link
-                </button>
-              </div>
-              <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                <img
-                  src={result}
-                  alt="Enhanced"
-                  className="w-full h-auto object-cover rounded-xl transition-transform duration-300 hover:scale-[1.02]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-              </div>
-              <div className="mt-4 text-center">
-                <button className="text-sm text-gray-600 hover:text-gray-900">
-                  Download Result
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Footer Note */}
-      <div className="mt-12 text-center">
-        <p className="text-sm text-gray-500">
-          AI processing may take 30-60 seconds. Results are optimized for social media.
-        </p>
-      </div>
-    </div>
+    </main>
   );
 }

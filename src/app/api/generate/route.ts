@@ -1,77 +1,111 @@
 import { NextResponse } from 'next/server';
 import { fal } from '@fal-ai/client';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabase-server';
 import sharp from 'sharp';
-import { randomUUID } from 'crypto';
 
 export async function POST(req: Request) {
-  const { imageUrl, prompt } = await req.json();
+  try {
+    const { imageUrl, prompt, generationId } = await req.json();
 
-  if (!imageUrl || !prompt) {
-    return NextResponse.json({ error: 'Missing data' }, { status: 400 });
-  }
+    if (!imageUrl || !prompt || !generationId) {
+      return NextResponse.json({ error: 'Missing data' }, { status: 400 });
+    }
 
-  const generationId = randomUUID();
+    /* -------------------- 1. Generate image -------------------- */
 
-  // 1️⃣ Generate image
-  const result = await fal.subscribe('fal-ai/nano-banana-pro/edit', {
-    input: {
-      prompt,
-      image_urls: [imageUrl.publicUrl],
-    },
-  });
-
-  const finalImageUrl = result.data.images[0].url;
-  const imageBuffer = Buffer.from(
-    await (await fetch(finalImageUrl)).arrayBuffer()
-  );
-
-  // 2️⃣ Create watermark preview
-  const previewBuffer = await sharp(imageBuffer)
-    .composite([
-      {
-        input: Buffer.from(`
-          <svg width="800" height="200">
-            <text x="50%" y="50%" text-anchor="middle"
-              dominant-baseline="middle"
-              font-size="48"
-              fill="white"
-              opacity="0.35">
-              BetterPhoto.xyz
-            </text>
-          </svg>
-        `),
-        gravity: 'center',
+    const result = await fal.subscribe('fal-ai/nano-banana-pro/edit', {
+      input: {
+        prompt,
+        image_urls: [imageUrl],
       },
-    ])
-    .jpeg()
-    .toBuffer();
+    });
 
-  // 3️⃣ Upload preview
-  const previewPath = `${generationId}.jpg`;
-  await supabase.storage
-    .from('previews')
-    .upload(previewPath, previewBuffer, { contentType: 'image/jpeg' });
+    const finalImageUrl = result.data.images[0].url;
+    const imageBuffer = Buffer.from(
+      await (await fetch(finalImageUrl)).arrayBuffer()
+    );
 
-  // 4️⃣ Upload original
-  const resultPath = `${generationId}.jpg`;
-  await supabase.storage
-    .from('results')
-    .upload(resultPath, imageBuffer, { contentType: 'image/jpeg' });
+    // 2️⃣ Create watermark preview (SAFE)
 
-  const previewUrl = supabase.storage.from('previews').getPublicUrl(previewPath)
-    .data.publicUrl;
+    const image = sharp(imageBuffer);
+    const metadata = await image.metadata();
 
-  // 5️⃣ Save to DB
-  await supabase.from('generations').insert({
-    id: generationId,
-    preview_url: previewUrl,
-    result_url: resultPath,
-    paid: false,
-  });
+    const width = metadata.width ?? 1024;
+    const height = metadata.height ?? 1024;
 
-  return NextResponse.json({
-    generationId,
-    previewUrl,
-  });
+    // watermark всегда меньше изображения
+    const watermarkWidth = Math.floor(width * 0.8);
+    const watermarkHeight = Math.floor(height * 0.2);
+
+    const watermarkSvg = `
+<svg width="${watermarkWidth}" height="${watermarkHeight}">
+  <text
+    x="50%"
+    y="50%"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    font-size="${Math.floor(watermarkHeight * 0.4)}"
+    fill="white"
+    opacity="0.35"
+    font-family="Arial, Helvetica, sans-serif"
+  >
+    BetterPhoto.xyz
+  </text>
+</svg>
+`;
+
+    const previewBuffer = await image
+      .composite([
+        {
+          input: Buffer.from(watermarkSvg),
+          gravity: 'center',
+        },
+      ])
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    /* -------------------- 3. Upload preview (PUBLIC) -------------------- */
+
+    const previewPath = `${generationId}.jpg`;
+
+    await supabaseServer.storage
+      .from('previews') // PUBLIC bucket
+      .upload(previewPath, previewBuffer, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    const previewUrl = supabaseServer.storage
+      .from('previews')
+      .getPublicUrl(previewPath).data.publicUrl;
+
+    /* -------------------- 4. Upload original (PRIVATE) -------------------- */
+
+    const resultPath = `${generationId}.jpg`;
+
+    await supabaseServer.storage
+      .from('results') // PRIVATE bucket
+      .upload(resultPath, imageBuffer, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    /* -------------------- 5. Save generation -------------------- */
+
+    await supabaseServer.from('generations').insert({
+      id: generationId,
+      preview_url: previewUrl,
+      result_path: resultPath,
+      paid: false,
+      created_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      generationId,
+      previewUrl,
+    });
+  } catch (err) {
+    console.error('Generate error:', err);
+    return NextResponse.json({ error: 'Generation failed' }, { status: 500 });
+  }
 }
