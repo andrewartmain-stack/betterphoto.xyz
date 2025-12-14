@@ -9,12 +9,20 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.7.2",
+    "@heroicons/react": "^2.2.0",
+    "@supabase/supabase-js": "^2.87.1",
+    "axios": "^1.13.2",
+    "formidable": "^3.5.4",
+    "formidable-serverless": "^1.1.1",
+    "fs": "^0.0.1-security",
     "next": "16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/formidable": "^3.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
