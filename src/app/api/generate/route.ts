@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     await supabaseServer.from('generations').insert({
       id: generationId,
       preview_url: previewUrl,
-      result_path: resultPath,
+      result_url: resultPath,
       paid: false,
       created_at: new Date().toISOString(),
     });
